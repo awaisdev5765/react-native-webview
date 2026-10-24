@@ -85,7 +85,19 @@ public class RNCWebViewClient extends WebViewClient {
     }
 
     @Override
-    public boolean shouldOverrideUrlLoading(WebView view, String url, boolean isTopFrame) {
+    public boolean shouldOverrideUrlLoading(WebView view, String url) {
+        // The legacy String overload is always a main-frame navigation.
+        return this.shouldOverrideUrlLoading(view, url, true);
+    }
+
+    /**
+     * Shared implementation for both overloads.
+     *
+     * @param isTopFrame whether the navigation targets the main frame; the
+     *                   synchronous path forwards the real value so
+     *                   onShouldStartLoadWithRequest can tell frames apart.
+     */
+    private boolean shouldOverrideUrlLoading(WebView view, String url, boolean isTopFrame) {
         final RNCWebView rncWebView = (RNCWebView) view;
         final boolean isJsDebugging = rncWebView.getReactApplicationContext().getJavaScriptContextHolder().get() == 0;
 
@@ -126,10 +138,14 @@ public class RNCWebViewClient extends WebViewClient {
             progressChangedFilter.setWaitingForCommandLoadUrl(true);
 
             int reactTag = RNCWebViewWrapper.getReactTagFromWebView(view);
+            // The fallback cancels this navigation and the JS side may replay
+            // it with loadUrl on the whole WebView, which loads in the main
+            // frame (#4043). Report `true` here so every fallback navigation is
+            // treated as a main-frame load until that replay behaviour changes.
             UIManagerHelper.getEventDispatcherForReactTag((ReactContext) view.getContext(), reactTag).dispatchEvent(new TopShouldStartLoadWithRequestEvent(
                     UIManagerHelper.getSurfaceId(view),
                     reactTag,
-                    createWebViewEvent(view, url, isTopFrame)));
+                    createWebViewEvent(view, url, true)));
             return true;
         }
     }
